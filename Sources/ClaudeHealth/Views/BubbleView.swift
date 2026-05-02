@@ -8,6 +8,7 @@ struct BubbleView: View {
 
     @State private var isHovering = false
     @State private var bubbleMetric: BubbleMetric = Appearance.bubbleMetric
+    @State private var realWorkOnly: Bool = Appearance.bubbleRealWorkOnly
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// Raw activity progress (0…∞), Apple-Health-style. Tracks whichever
@@ -30,8 +31,8 @@ struct BubbleView: View {
             return max(dailyP, limitP)
         }
         // Fallback: no limit configured at all.
-        let value = Double(bubbleMetric.value(from: agg))
-        let baseline = bubbleMetric.baseline(from: agg)
+        let value = Double(bubbleMetric.value(from: agg, realWorkOnly: realWorkOnly))
+        let baseline = bubbleMetric.baseline(from: agg, realWorkOnly: realWorkOnly)
         return min(1.0, value / max(1, baseline))
     }
 
@@ -71,7 +72,7 @@ struct BubbleView: View {
 
     var body: some View {
         let agg = store.aggregates
-        let displayedValue = bubbleMetric.value(from: agg)
+        let displayedValue = bubbleMetric.value(from: agg, realWorkOnly: realWorkOnly)
 
         ZStack {
             Circle()
@@ -148,7 +149,7 @@ struct BubbleView: View {
                     // Snappier transition so live updates feel as responsive as velocity does.
                     .contentTransition(.numericText(value: Double(displayedValue)))
                     .animation(reduceMotion ? .none : .spring(response: 0.20, dampingFraction: 0.85), value: displayedValue)
-                Text(bubbleMetric.shortLabel(from: agg))
+                Text(bubbleMetric.shortLabel(from: agg, realWorkOnly: realWorkOnly))
                     .font(.system(size: 8, weight: .medium))
                     .tracking(0.4)
                     .foregroundStyle(.secondary)
@@ -179,8 +180,10 @@ struct BubbleView: View {
         .onTapGesture { onPrimaryAction() }
         .onReceive(NotificationCenter.default.publisher(for: Appearance.didChange)) { _ in
             // Settings or another menu changed the metric — sync our local @State.
-            let latest = Appearance.bubbleMetric
-            if latest != bubbleMetric { bubbleMetric = latest }
+            let latestMetric = Appearance.bubbleMetric
+            if latestMetric != bubbleMetric { bubbleMetric = latestMetric }
+            let latestRealWork = Appearance.bubbleRealWorkOnly
+            if latestRealWork != realWorkOnly { realWorkOnly = latestRealWork }
         }
         .help(tooltipText(for: agg))
         .accessibilityElement(children: .ignore)

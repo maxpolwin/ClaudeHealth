@@ -42,30 +42,36 @@ enum BubbleMetric: String, CaseIterable, Identifiable {
 
     /// Pull the right number out of the aggregates for this metric. Velocity
     /// auto-switches to per-second display when the rate is ≥ 1 token/sec,
-    /// otherwise falls back to per-minute (so it never reads "0 / sec" while
-    /// there's actually something happening).
-    func value(from agg: Aggregates) -> Int {
+    /// otherwise falls back to per-minute. When `realWorkOnly` is true, all
+    /// numbers come from the input+output-only series (excludes cache reads),
+    /// matching what Anthropic's chat UI displays.
+    func value(from agg: Aggregates, realWorkOnly: Bool = false) -> Int {
         switch self {
-        case .today:    return agg.todayTokens
-        case .week:     return agg.last7Tokens
-        case .month:    return agg.last30Tokens
+        case .today:
+            return realWorkOnly ? agg.realWorkToday : agg.todayTokens
+        case .week:
+            return realWorkOnly ? agg.realWorkLast7 : agg.last7Tokens
+        case .month:
+            return realWorkOnly ? agg.realWorkLast30 : agg.last30Tokens
         case .velocity:
-            let perSec = agg.liveVelocityPerMinute / 60.0
-            return perSec >= 1.0
-                ? Int(perSec.rounded())
-                : Int(agg.liveVelocityPerMinute.rounded())
+            let vpm = realWorkOnly ? agg.realWorkLiveVelocityPerMinute
+                                   : agg.liveVelocityPerMinute
+            let perSec = vpm / 60.0
+            return perSec >= 1.0 ? Int(perSec.rounded()) : Int(vpm.rounded())
         }
     }
 
     /// Short label rendered under the value inside the bubble. For velocity,
     /// this is unit-aware ("/ sec" vs "/ min") so it tracks the current value.
-    func shortLabel(from agg: Aggregates) -> String {
+    func shortLabel(from agg: Aggregates, realWorkOnly: Bool = false) -> String {
         switch self {
         case .today: return "today"
         case .week:  return "7-day"
         case .month: return "30-day"
         case .velocity:
-            return (agg.liveVelocityPerMinute / 60.0) >= 1.0 ? "/ sec" : "/ min"
+            let vpm = realWorkOnly ? agg.realWorkLiveVelocityPerMinute
+                                   : agg.liveVelocityPerMinute
+            return (vpm / 60.0) >= 1.0 ? "/ sec" : "/ min"
         }
     }
 
@@ -73,14 +79,22 @@ enum BubbleMetric: String, CaseIterable, Identifiable {
     /// 0…1 for the chosen metric. For 30-day, baseline equals the value.
     /// For velocity, baseline matches the current display unit so the ring
     /// scales smoothly across the auto-switch boundary.
-    func baseline(from agg: Aggregates) -> Double {
-        let avgPerDay = max(1.0, agg.thirtyDayDailyAverage)
+    func baseline(from agg: Aggregates, realWorkOnly: Bool = false) -> Double {
+        // The "typical" baseline still uses the all-tokens avg in fallback modes;
+        // when realWork is on, divide it by ~50 to approximate the input+output
+        // share (since real-work is ~2 % of the all-tokens total in practice).
+        // This keeps the ring scale meaningful in both modes.
+        let avgPerDay = max(1.0, agg.thirtyDayDailyAverage * (realWorkOnly ? 0.02 : 1.0))
         switch self {
         case .today: return avgPerDay
         case .week:  return avgPerDay * 7
-        case .month: return max(1.0, Double(agg.last30Tokens))
+        case .month:
+            let monthVal = realWorkOnly ? agg.realWorkLast30 : agg.last30Tokens
+            return max(1.0, Double(monthVal))
         case .velocity:
-            let perSec = agg.liveVelocityPerMinute / 60.0
+            let vpm = realWorkOnly ? agg.realWorkLiveVelocityPerMinute
+                                   : agg.liveVelocityPerMinute
+            let perSec = vpm / 60.0
             return perSec >= 1.0
                 ? max(1.0, avgPerDay / (24.0 * 60.0 * 60.0))
                 : max(1.0, avgPerDay / (24.0 * 60.0))
@@ -114,9 +128,10 @@ enum MenuBarStyle: String, CaseIterable, Identifiable {
 /// Persistence + change-broadcast for appearance choices.
 @MainActor
 enum Appearance {
-    static let iconKey         = "ClaudeHealth.iconStyle"
-    static let menuBarKey      = "ClaudeHealth.menuBarStyle"
-    static let bubbleMetricKey = "ClaudeHealth.bubbleMetric"
+    static let iconKey               = "ClaudeHealth.iconStyle"
+    static let menuBarKey            = "ClaudeHealth.menuBarStyle"
+    static let bubbleMetricKey       = "ClaudeHealth.bubbleMetric"
+    static let bubbleRealWorkOnlyKey = "ClaudeHealth.bubbleRealWorkOnly"
 
     /// Posted whenever any appearance preference changes.
     static let didChange = Notification.Name("ClaudeHealth.appearanceDidChange")
@@ -147,6 +162,18 @@ enum Appearance {
         }
         set {
             UserDefaults.standard.set(newValue.rawValue, forKey: bubbleMetricKey)
+            NotificationCenter.default.post(name: didChange, object: nil)
+        }
+    }
+
+    /// When true, the floating bubble (and its velocity reading) shows only
+    /// "real work" tokens — input + output, excluding cache reads/creates —
+    /// matching the numbers Anthropic's chat UI surfaces. Default OFF: bubble
+    /// shows the full all-tokens count (billing reality).
+    static var bubbleRealWorkOnly: Bool {
+        get { UserDefaults.standard.bool(forKey: bubbleRealWorkOnlyKey) }
+        set {
+            UserDefaults.standard.set(newValue, forKey: bubbleRealWorkOnlyKey)
             NotificationCenter.default.post(name: didChange, object: nil)
         }
     }

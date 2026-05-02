@@ -11,6 +11,7 @@ struct SettingsView: View {
     @State private var iconStyle: IconStyle = Appearance.iconStyle
     @State private var menuBarStyle: MenuBarStyle = Appearance.menuBarStyle
     @State private var bubbleMetric: BubbleMetric = Appearance.bubbleMetric
+    @State private var bubbleRealWorkOnly: Bool = Appearance.bubbleRealWorkOnly
 
     var body: some View {
         Form {
@@ -63,6 +64,24 @@ struct SettingsView: View {
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
+                }
+                .padding(.vertical, 4)
+
+                Toggle(isOn: Binding(
+                    get: { bubbleRealWorkOnly },
+                    set: { newValue in
+                        bubbleRealWorkOnly = newValue
+                        Appearance.bubbleRealWorkOnly = newValue
+                    }
+                )) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Bubble shows real work tokens only")
+                            .font(.system(size: 12, weight: .medium))
+                        Text("Input + output, excludes cache reads. Aligned with the numbers Anthropic's chat UI shows. Velocity also switches.")
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
                 .padding(.vertical, 4)
 

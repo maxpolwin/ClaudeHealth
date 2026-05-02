@@ -14,6 +14,8 @@ struct DashboardView: View {
 
                 InsightCard(store: store)
 
+                RealWorkCard(agg: agg)
+
                 Grid(horizontalSpacing: 12, verticalSpacing: 12) {
                     GridRow {
                         SummaryCard(title: "Today", symbol: "sun.max.fill",

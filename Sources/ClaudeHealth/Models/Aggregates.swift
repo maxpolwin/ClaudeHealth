@@ -31,6 +31,19 @@ struct Aggregates: Codable, Equatable {
     var liveVelocityPerMinute: Double         // sum of last 3 minute buckets / 3  (responsive, decays in ~3 min)
     var minutelyLast60: [MinuteBucket]        // tokens per minute over the last 60 minutes (60 entries)
 
+    // "Real work" tokens: input + output only. Excludes cache_read (which
+    // dominates the all-tokens count by ~97 %) AND cache_creation. This is the
+    // "human-meaningful" view — what you typed and what Claude generated —
+    // and roughly matches the numbers Anthropic's chat UI surfaces.
+    var realWorkToday: Int
+    var realWorkLast7: Int
+    var realWorkLast30: Int
+    var realWorkLast5h: Int
+    var realWorkLast15min: Int
+    var realWorkVelocityPerMinute: Double      // smooth 15-min
+    var realWorkLiveVelocityPerMinute: Double  // responsive 3-min
+    var realWorkMinutelyLast60: [MinuteBucket] // for the velocity sparkline when in real-work mode
+
     // Cowork (Claude Desktop App, agent-mode) sessions — metadata only, no tokens
     // (those live inside the Cowork VM, unreachable from host). Lets us at least
     // surface "Hey, you ran N agent sessions today" alongside the Code-only data.
@@ -49,8 +62,17 @@ struct Aggregates: Codable, Equatable {
         currentStreakDays: 0, longestStreakDays: 0,
         tokensLast5h: 0, tokensLast15min: 0,
         velocityPerMinute: 0, liveVelocityPerMinute: 0, minutelyLast60: [],
+        realWorkToday: 0, realWorkLast7: 0, realWorkLast30: 0,
+        realWorkLast5h: 0, realWorkLast15min: 0,
+        realWorkVelocityPerMinute: 0, realWorkLiveVelocityPerMinute: 0,
+        realWorkMinutelyLast60: [],
         coworkSessionsPerDay: [], recentCoworkSessions: []
     )
+}
+
+extension DailyBucket {
+    /// Input + output only — Claude's "real work" output excluding cache plumbing.
+    var realWorkTokens: Int { inputTokens + outputTokens }
 }
 
 /// One Claude Desktop App "Cowork" / agent-mode session. We see metadata only

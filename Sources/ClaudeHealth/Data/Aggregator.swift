@@ -25,10 +25,14 @@ enum Aggregator {
 
         var tokensLast5h = 0
         var tokensLast15min = 0
+        var realWorkLast5h = 0
+        var realWorkLast15min = 0
         var minutelyMap: [Date: Int] = [:]    // minute-start → tokens
+        var realWorkMinutelyMap: [Date: Int] = [:]
 
         for r in records {
             let day = cal.startOfDay(for: r.timestamp)
+            let realWork = r.inputTokens + r.outputTokens   // input + output only
 
             var d = dailyMap[day] ?? (0,0,0,0)
             d.input  += r.inputTokens
@@ -48,20 +52,21 @@ enum Aggregator {
             projMap[r.projectKey, default: 0] += r.totalTokens
             modelMap[r.model, default: 0] += r.totalTokens
 
-            // Limit math counts ALL token types (input + output + cache_creation + cache_read)
-            // for consistency with the rest of the dashboard. Cache_read is a discount mechanism
-            // and doesn't push you toward Anthropic's rate limits as hard as input/output, so
-            // pick a budget number relative to what you see in the dashboard's "Today" / "30-day"
-            // numbers — not Anthropic's per-plan documentation.
+            // Limit math counts ALL token types for consistency with the dashboard's
+            // headline numbers; the parallel real-work tracks input+output only for
+            // the "human-meaningful" view (Anthropic-chat-aligned).
             if r.timestamp >= fiveHoursAgo {
                 tokensLast5h += r.totalTokens
+                realWorkLast5h += realWork
             }
             if r.timestamp >= fifteenMinAgo {
                 tokensLast15min += r.totalTokens
+                realWorkLast15min += realWork
             }
             if r.timestamp >= sixtyMinAgo {
                 let minute = startOfMinute(r.timestamp, cal: cal)
                 minutelyMap[minute, default: 0] += r.totalTokens
+                realWorkMinutelyMap[minute, default: 0] += realWork
             }
         }
 
@@ -131,6 +136,20 @@ enum Aggregator {
         let lastThree = minutely.suffix(3).reduce(0) { $0 + $1.tokens }
         let liveVelocity = Double(lastThree) / 3.0
 
+        // --- Real-work parallel series (input + output only) ---
+        var realWorkMinutely: [MinuteBucket] = []
+        realWorkMinutely.reserveCapacity(60)
+        for offset in stride(from: -59, through: 0, by: 1) {
+            let m = cal.date(byAdding: .minute, value: offset, to: nowMinute)!
+            realWorkMinutely.append(MinuteBucket(date: m, tokens: realWorkMinutelyMap[m] ?? 0))
+        }
+        let realWorkVelocity = Double(realWorkLast15min) / 15.0
+        let realWorkLastThree = realWorkMinutely.suffix(3).reduce(0) { $0 + $1.tokens }
+        let realWorkLiveVelocity = Double(realWorkLastThree) / 3.0
+        let realWorkToday = (dailyMap[today].map { $0.input + $0.output }) ?? 0
+        let realWorkLast7  = sumRealWork(daily: daily, days: 7,  ending: today, cal: cal)
+        let realWorkLast30 = sumRealWork(daily: daily, days: 30, ending: today, cal: cal)
+
         return Aggregates(
             generatedAt: Date(),
             totalRecords: records.count,
@@ -154,6 +173,14 @@ enum Aggregator {
             velocityPerMinute: velocity,
             liveVelocityPerMinute: liveVelocity,
             minutelyLast60: minutely,
+            realWorkToday: realWorkToday,
+            realWorkLast7: realWorkLast7,
+            realWorkLast30: realWorkLast30,
+            realWorkLast5h: realWorkLast5h,
+            realWorkLast15min: realWorkLast15min,
+            realWorkVelocityPerMinute: realWorkVelocity,
+            realWorkLiveVelocityPerMinute: realWorkLiveVelocity,
+            realWorkMinutelyLast60: realWorkMinutely,
             coworkSessionsPerDay: coworkSessionsPerDay,
             recentCoworkSessions: recentCowork
         )
@@ -164,6 +191,11 @@ enum Aggregator {
     private static func totalIn(daily: [DailyBucket], days: Int, ending: Date, cal: Calendar) -> Int {
         let lower = cal.date(byAdding: .day, value: -(days - 1), to: ending)!
         return daily.filter { $0.date >= lower && $0.date <= ending }.reduce(0) { $0 + $1.totalTokens }
+    }
+
+    private static func sumRealWork(daily: [DailyBucket], days: Int, ending: Date, cal: Calendar) -> Int {
+        let lower = cal.date(byAdding: .day, value: -(days - 1), to: ending)!
+        return daily.filter { $0.date >= lower && $0.date <= ending }.reduce(0) { $0 + $1.realWorkTokens }
     }
 
     private static func streaks(daily: [DailyBucket], today: Date, cal: Calendar) -> (current: Int, longest: Int) {
