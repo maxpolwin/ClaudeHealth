@@ -10,26 +10,36 @@ struct BubbleView: View {
     @State private var bubbleMetric: BubbleMetric = Appearance.bubbleMetric
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Raw activity progress (0…∞). When the user has set a daily token budget,
-    /// this is `today / dailyLimit` and is allowed to exceed 1 (overflow visualised
-    /// as a second inner ring, Apple-Activity style — but capped at 1 stacked overflow).
-    /// When no daily budget is set, falls back to "today vs 30-day average" and is
-    /// hard-capped at 1.0 (no overflow rendering — that would mean "you did more than
-    /// average," which isn't a thing to alarm-stack about).
+    /// Raw activity progress (0…∞), Apple-Health-style. Tracks whichever
+    /// configured limit you're closer to maxing out — so 80% of your 5h cap
+    /// fills the ring 80%, 80% of your daily goal also fills it 80%, and if
+    /// you've set both the more critical one wins.
+    ///
+    /// Priority:
+    ///   1. max(daily limit progress, 5h limit progress)  — when either is set
+    ///   2. today / 30-day-average                         — fallback, hard-capped at 1.0
     private var activityProgress: Double {
         let agg = store.aggregates
-        if store.usageLimitDaily > 0 {
-            return Double(agg.todayTokens) / Double(store.usageLimitDaily)
+        let dailyP: Double = store.usageLimitDaily > 0
+            ? Double(agg.todayTokens) / Double(store.usageLimitDaily)
+            : 0
+        let limitP: Double = store.usageLimitBudget > 0
+            ? Double(agg.tokensLast5h) / Double(store.usageLimitBudget)
+            : 0
+        if dailyP > 0 || limitP > 0 {
+            return max(dailyP, limitP)
         }
+        // Fallback: no limit configured at all.
         let value = Double(bubbleMetric.value(from: agg))
         let baseline = bubbleMetric.baseline(from: agg)
-        // Cap at 1.0 in fallback mode — no overflow stacking.
         return min(1.0, value / max(1, baseline))
     }
 
-    /// Whether to render the second-arc overflow ring (only meaningful when a
-    /// daily limit is set AND the user has crossed 100% of it).
-    private var hasOverflow: Bool { store.usageLimitDaily > 0 && activityProgress > 1.0 }
+    /// Whether to render the second-arc overflow ring (when any configured limit
+    /// has been crossed). In fallback mode there's nothing to overflow against.
+    private var hasOverflow: Bool {
+        (store.usageLimitDaily > 0 || store.usageLimitBudget > 0) && activityProgress > 1.0
+    }
 
     /// 0..1 fill of the OUTER ring — at most fully filled.
     private var outerArcFill: Double { min(1.0, activityProgress) }
@@ -42,9 +52,10 @@ struct BubbleView: View {
     private var limitProgress: Double { store.usageLimitProgress }
 
     /// Color shifts within the warm Claude family as the limit approaches:
-    /// brand orange → warm amber → systemRed. Keeps the bubble visually consistent
-    /// with the rest of the UI while still signalling "stop" at saturation.
-    private var ringColor: Color { Palette.limitColor(progress: limitProgress) }
+    /// brand orange → warm amber → systemRed. Tied to the **same** progress that
+    /// drives the ring fill, so when the ring is at 80% the color is also at the
+    /// matching warmth — visually consistent.
+    private var ringColor: Color { Palette.limitColor(progress: activityProgress) }
 
     private var isOverLimit: Bool { limitProgress >= 1.0 && store.usageLimitBudget > 0 }
 
