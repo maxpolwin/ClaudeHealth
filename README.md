@@ -94,8 +94,6 @@ Then `cp -R build/ClaudeHealth.app /Applications/` and you're done — no Gateke
 
 ## Hardening
 
-Hardening posture (see `/Users/max/.claude/plans/i-want-a-visualization-polished-turing.md` for the full v1.2/1.3/1.4 plans):
-
 - **No network**: zero `URLSession`/`Network`/HTTP refs in source; no `NSAppTransportSecurity` exceptions; verifiable with `LuLu`.
 - **No subprocess / dyn-loading**: no `Process()` / `dlopen` / `posix_spawn` in app sources.
 - **Hardened Runtime ON**, with seven explicit-deny entitlements (`allow-jit`, `allow-unsigned-executable-memory`, `allow-dyld-environment-variables`, `disable-library-validation`, `disable-executable-page-protection`, `allow-relative-library-loads` + `app-sandbox`).
