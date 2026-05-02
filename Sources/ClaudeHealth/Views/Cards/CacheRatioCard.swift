@@ -23,8 +23,16 @@ struct CacheRatioCard: View {
             HStack {
                 CardHeader(title: "Cache hit ratio — 30d",
                            symbol: "bolt.fill",
-                           tint: .green,
-                           info: "Tokens served from prompt cache ÷ total input tokens. Higher = more of your context is being reused, which is cheaper and faster. Hover any point for the daily ratio.")
+                           tint: Palette.brand,
+                           info: """
+                           When Claude reads your conversation each turn, it can either re-read everything from scratch OR reuse what it already 'remembers' from earlier in the same session. The reused part is a cache hit — Anthropic charges roughly 10× less for those tokens, and they don't slow Claude down.
+
+                           This shows the share of your daily input that came from cache vs. fresh reads. Higher = more reuse = lower bill and faster responses.
+
+                           • >80% — excellent, most of your context is being recycled efficiently
+                           • 40-80% — normal during active work where files keep changing
+                           • <20% — lots of new material every turn (long sessions with frequent context switches)
+                           """)
                 Spacer(minLength: 0)
                 Text(NumberFormat.percent(avgRatio))
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
@@ -38,7 +46,7 @@ struct CacheRatioCard: View {
                         y: .value("Ratio", d.cacheHitRatio)
                     )
                     .foregroundStyle(LinearGradient(
-                        colors: [Color.green.opacity(0.35), Color.green.opacity(0.05)],
+                        colors: [Palette.brand.opacity(0.35), Palette.brand.opacity(0.05)],
                         startPoint: .top, endPoint: .bottom))
                     .interpolationMethod(.monotone)
 
@@ -46,7 +54,7 @@ struct CacheRatioCard: View {
                         x: .value("Date", d.date, unit: .day),
                         y: .value("Ratio", d.cacheHitRatio)
                     )
-                    .foregroundStyle(Color.green)
+                    .foregroundStyle(Palette.brand)
                     .interpolationMethod(.monotone)
                     .lineStyle(StrokeStyle(lineWidth: 1.5))
                 }
@@ -59,7 +67,7 @@ struct CacheRatioCard: View {
                                     .font(.system(size: 10, weight: .semibold))
                                 Text(NumberFormat.percent(b.cacheHitRatio))
                                     .font(.system(size: 11, weight: .bold, design: .rounded))
-                                    .foregroundStyle(.green)
+                                    .foregroundStyle(Palette.brand)
                             }
                             .padding(.horizontal, 8).padding(.vertical, 6)
                             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))

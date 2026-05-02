@@ -12,6 +12,8 @@ struct DashboardView: View {
 
                 HeroRingCard(aggregates: agg)
 
+                InsightCard(store: store)
+
                 Grid(horizontalSpacing: 12, verticalSpacing: 12) {
                     GridRow {
                         SummaryCard(title: "Today", symbol: "sun.max.fill",
@@ -44,11 +46,11 @@ struct DashboardView: View {
 
                 StreakCard(current: agg.currentStreakDays, longest: agg.longestStreakDays)
 
-                YearHeatmapCard(daily: agg.daily)
+                HourDayHeatmapCard(hourDay: agg.hourDay)
 
                 DailyStackedBarCard(daily: agg.daily)
 
-                HourDayHeatmapCard(hourDay: agg.hourDay)
+                YearHeatmapCard(daily: agg.daily)
 
                 Grid(horizontalSpacing: 12, verticalSpacing: 12) {
                     GridRow {

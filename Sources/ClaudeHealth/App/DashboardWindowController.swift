@@ -40,6 +40,12 @@ final class DashboardWindowController: NSWindowController {
             panel.animator().alphaValue = 1
         })
         installMonitors()
+
+        // Trigger an Apple Intelligence insight refresh in the background.
+        // Throttled in DataStore — won't fire if a fresh one already exists.
+        Task { @MainActor [weak store] in
+            await store?.maybeRefreshInsight()
+        }
     }
 
     func hide() {

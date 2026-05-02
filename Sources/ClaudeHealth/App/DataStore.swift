@@ -32,6 +32,13 @@ final class DataStore {
     /// Direct callback rather than KVO/polling so no timing race.
     var onConfettiTrigger: (() -> Void)?
 
+    // --- Apple Intelligence insight (on-device, optional) ---
+    var insight: String? = nil
+    var insightLoading: Bool = false
+    var insightUpdatedAt: Date? = nil
+    /// Throttle: don't auto-regenerate more often than this.
+    private let insightAutoStale: TimeInterval = 30 * 60   // 30 min
+
     private let parser: TranscriptParser
     private var cache: FileIndex
     private let watcher: FileWatcher
@@ -101,6 +108,32 @@ final class DataStore {
     func triggerConfettiNow() {
         Log.confetti.info("manual trigger requested")
         onConfettiTrigger?()
+    }
+
+    /// Regenerate the on-device Apple Intelligence summary. User-triggered or
+    /// auto-called by `maybeRefreshInsight()` when the cached insight is stale.
+    func regenerateInsight() async {
+        guard !insightLoading else { return }
+        insightLoading = true
+        defer { insightLoading = false }
+        let result = await InsightGenerator.generate(
+            from: aggregates,
+            dailyBudget: usageLimitDaily,
+            fiveHourBudget: usageLimitBudget
+        )
+        if let result {
+            insight = result
+            insightUpdatedAt = Date()
+        }
+    }
+
+    /// Auto-refresh the insight if it's missing or older than the throttle window.
+    /// Called by DashboardWindowController on show. Cheap when nothing to do.
+    func maybeRefreshInsight() async {
+        if let last = insightUpdatedAt, Date().timeIntervalSince(last) < insightAutoStale {
+            return
+        }
+        await regenerateInsight()
     }
 
     func clearLimitEvents() {

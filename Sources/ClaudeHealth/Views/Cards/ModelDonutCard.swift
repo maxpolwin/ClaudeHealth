@@ -9,14 +9,26 @@ struct ModelDonutCard: View {
         models.reduce(0) { $0 + $1.totalTokens }
     }
 
+    /// Distinct shades within the warm Claude palette — biggest slice gets the
+    /// primary brand orange, runners-up cycle through deep burnt / amber / gold
+    /// / dark. Stays cohesive with the rest of the app, never muddy "two of the
+    /// same colored slices" because models within a family used to share one hue.
     private var palette: [String: Color] {
+        let shadesSequence: [Color] = [
+            Palette.brand,                                     // #D97757 — Claude orange (primary)
+            Palette.brandDeep,                                 // #A65133 — deep burnt
+            Palette.brandWarm,                                 // #F2A652 — warm amber
+            Color(red: 0.97, green: 0.85, blue: 0.55),         // light gold
+            Color(red: 0.62, green: 0.30, blue: 0.18),         // very deep mahogany
+            Color(red: 0.80, green: 0.65, blue: 0.40),         // muted tan
+            Color(red: 1.00, green: 0.55, blue: 0.30),         // bright tangerine
+            Color(red: 0.45, green: 0.22, blue: 0.12)          // espresso
+        ]
         var p: [String: Color] = [:]
-        for m in models {
-            let name = m.displayName.lowercased()
-            if name.hasPrefix("opus")        { p[m.model] = .purple }
-            else if name.hasPrefix("sonnet") { p[m.model] = .blue }
-            else if name.hasPrefix("haiku")  { p[m.model] = .green }
-            else                              { p[m.model] = .gray }
+        // `models` already arrives sorted descending by tokens, so we assign in
+        // that order — the biggest slice always gets the most prominent shade.
+        for (i, m) in models.enumerated() {
+            p[m.model] = shadesSequence[i % shadesSequence.count]
         }
         return p
     }
