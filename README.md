@@ -13,6 +13,7 @@ v1.0 — public release. Code-signed (ad-hoc by default; Developer ID + notariza
 
 <img width="740" height="904" alt="Screenshot 2026-05-02 at 09 09 14" src="https://github.com/user-attachments/assets/7f2e4741-0c21-4a0a-8c86-6a6bb8a3c29c" />
 
+<img width="730" height="888" alt="Screenshot 2026-05-02 at 09 09 56" src="https://github.com/user-attachments/assets/2974b3e8-1906-4290-8d34-97c23680cf7a" />
 
 
 ## Requirements
