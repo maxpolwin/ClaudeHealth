@@ -12,7 +12,7 @@ settings:
     MACOSX_DEPLOYMENT_TARGET: "14.0"
     DEVELOPMENT_TEAM: PDPT7GQQWN
     PRODUCT_BUNDLE_IDENTIFIER: com.max.ClaudeHealth
-    MARKETING_VERSION: "1.0.0"
+    MARKETING_VERSION: "1.0.1"
     CURRENT_PROJECT_VERSION: "1"
     # Code signing — defaults to Apple Development (works on your registered Mac).
     # To distribute outside the App Store, switch to "Developer ID Application"
