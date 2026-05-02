@@ -1,0 +1,82 @@
+name: ClaudeHealth
+options:
+  bundleIdPrefix: com.max
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+  deploymentTarget:
+    macOS: "14.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    DEVELOPMENT_TEAM: PDPT7GQQWN
+    PRODUCT_BUNDLE_IDENTIFIER: com.max.ClaudeHealth
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # Code signing — defaults to Apple Development (works on your registered Mac).
+    # To distribute outside the App Store, switch to "Developer ID Application"
+    # (after creating that cert at developer.apple.com) and use build.sh --notarize.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "Apple Development: Max Polwin (QXT62Q4V34)"
+    PROVISIONING_PROFILE_SPECIFIER: ""
+    ENABLE_HARDENED_RUNTIME: YES
+    OTHER_CODE_SIGN_FLAGS: "--timestamp=none"
+    DEAD_CODE_STRIPPING: YES
+    SWIFT_OPTIMIZATION_LEVEL: "-O"
+    GCC_OPTIMIZATION_LEVEL: s
+  configs:
+    Debug:
+      SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+      SWIFT_ACTIVE_COMPILATION_CONDITIONS: "DEBUG"
+      OTHER_CODE_SIGN_FLAGS: "--timestamp=none"
+    Release:
+      SWIFT_OPTIMIZATION_LEVEL: "-O"
+      OTHER_CODE_SIGN_FLAGS: "--timestamp"
+
+targets:
+  ClaudeHealth:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: Sources/ClaudeHealth
+      - path: Resources/AppIcon.icns
+      - path: Resources/AppIcon-pulse.icns
+      - path: Resources/AppIcon-rings.icns
+      - path: Resources/AppIcon-bars.icns
+    info:
+      path: Resources/GeneratedInfo.plist
+      properties:
+        LSUIElement: true
+        LSMinimumSystemVersion: "14.0"
+        NSHighResolutionCapable: true
+        CFBundleName: ClaudeHealth
+        CFBundleDisplayName: ClaudeHealth
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        CFBundleIconFile: AppIcon
+        NSPrincipalClass: NSApplication
+        NSHumanReadableCopyright: "Personal use. No warranty."
+        # Explicit empty LSEnvironment — documents intent that the app ships with NO
+        # environment variables baked in. Future maintainers must justify any addition
+        # (esp. anything DYLD_*-shaped, which is how dylib injection ships in Mach-O bundles).
+        LSEnvironment: {}
+    entitlements:
+      path: Resources/ClaudeHealth.entitlements
+      properties:
+        # Sandbox OFF — required to read ~/.claude/projects/*/*.jsonl directly.
+        com.apple.security.app-sandbox: false
+        # Hardened-runtime exception entitlements explicitly DENIED so a tampered
+        # binary can't enable JIT, unsigned code, dyld-env injection, library-validation
+        # bypass, or relative library loads without re-signing under a different identity.
+        com.apple.security.cs.allow-jit: false
+        com.apple.security.cs.allow-unsigned-executable-memory: false
+        com.apple.security.cs.allow-dyld-environment-variables: false
+        com.apple.security.cs.disable-library-validation: false
+        com.apple.security.cs.disable-executable-page-protection: false
+        com.apple.security.cs.allow-relative-library-loads: false
+    settings:
+      base:
+        CODE_SIGN_ENTITLEMENTS: Resources/ClaudeHealth.entitlements
+        ENABLE_HARDENED_RUNTIME: YES

@@ -1,0 +1,39 @@
+# Build artifacts
+build/
+.build/
+DerivedData/
+*.xcodeproj/
+Resources/GeneratedInfo.plist
+
+# Distribution outputs
+*.dmg
+*.zip
+*.app
+
+# Generated icon intermediates (the .icns themselves ARE committed)
+Resources/AppIcon-*.iconset/
+Resources/*.iconset/
+build/preview-*.png
+
+# Per-user Claude Code state — never commit
+.claude/
+
+# macOS / Xcode noise
+.DS_Store
+**/.DS_Store
+xcuserdata/
+.swiftpm/
+*.swp
+*.swo
+*.xcscmblueprint
+*.xccheckout
+
+# Editors
+.vscode/
+.idea/
+*.iml
+
+# Local environment overrides (forks may add)
+.env
+.env.local
+*.local
