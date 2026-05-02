@@ -4,12 +4,13 @@ set -euo pipefail
 # Build script for ClaudeHealth using xcodebuild + the generated Xcode project.
 #
 # Usage:
-#   ./build.sh                 # Debug build (Apple Development signing) → build/
-#   ./build.sh --run           # Debug build + launch
-#   ./build.sh --install       # Release build + copy to /Applications
-#   ./build.sh --release       # Release build (no install)
-#   ./build.sh --notarize      # Release + Developer ID + notarize + staple
-#   ./build.sh --dmg           # Release + notarize app + create signed/notarized/stapled .dmg
+#   ./build.sh                       # Debug build (Apple Development signing) → build/
+#   ./build.sh --run                 # Debug build + launch
+#   ./build.sh --install             # Release build + copy to /Applications
+#   ./build.sh --release-only        # Release build, no install (renamed from --release)
+#   ./build.sh --notarize            # Release + Developer ID + notarize + staple
+#   ./build.sh --dmg                 # Release + notarize app + create signed/notarized/stapled .dmg
+#   ./build.sh --release vX.Y.Z      # --dmg + bump MARKETING_VERSION + git tag + gh release
 #
 # Override signing via env vars:
 #   SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" ./build.sh --release
@@ -53,13 +54,72 @@ fi
 ACTION="${1:---debug}"
 
 case "$ACTION" in
-    --release|--install|--notarize|--dmg)
+    --release|--release-only|--install|--notarize|--dmg)
         CONFIG=Release
         ;;
     *)
         CONFIG=Debug
         ;;
 esac
+
+# --- Release pre-flight + version bump --------------------------------
+# `--release vX.Y.Z` is a strict superset of `--dmg`: builds + notarizes the
+# DMG, then bumps MARKETING_VERSION, tags the commit, and creates a GitHub
+# release with the DMG attached.
+VERSION=""
+TAG=""
+if [[ "$ACTION" == "--release" ]]; then
+    VERSION_ARG="${2:-}"
+    if [[ -z "$VERSION_ARG" ]]; then
+        echo "✗ --release needs a version: $0 --release vX.Y.Z"
+        exit 2
+    fi
+    VERSION="${VERSION_ARG#v}"
+    if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        echo "✗ Version must be semver (e.g. 1.2.3 or v1.2.3), got: $VERSION_ARG"
+        exit 2
+    fi
+    TAG="v$VERSION"
+
+    # Pre-flight: clean tree, tag doesn't already exist.
+    if ! git diff --quiet || ! git diff --cached --quiet; then
+        echo "✗ Working tree has uncommitted changes. Commit or stash first."
+        git status --short
+        exit 1
+    fi
+    if git rev-parse "$TAG" >/dev/null 2>&1; then
+        echo "✗ Tag $TAG already exists locally."
+        exit 1
+    fi
+    if git ls-remote --tags origin "refs/tags/$TAG" 2>/dev/null | grep -q .; then
+        echo "✗ Tag $TAG already exists on origin."
+        exit 1
+    fi
+    if [[ "${SIGN_IDENTITY:-}" != *"Developer ID Application"* ]]; then
+        echo "✗ --release needs SIGN_IDENTITY=\"Developer ID Application: …\""
+        exit 1
+    fi
+    if [[ -z "${NOTARY_PROFILE:-}" && -z "${NOTARY_APPLE_ID:-}" ]]; then
+        echo "✗ --release needs NOTARY_PROFILE (or NOTARY_APPLE_ID/TEAM_ID/PASSWORD)"
+        exit 1
+    fi
+
+    # Bump MARKETING_VERSION in project.yml (if different) and push the bump
+    # commit BEFORE building, so the binary embeds the new version.
+    current=$(grep 'MARKETING_VERSION:' project.yml | head -1 | sed 's/.*"\(.*\)".*/\1/')
+    if [[ "$current" != "$VERSION" ]]; then
+        echo "→ Bumping MARKETING_VERSION: $current → $VERSION"
+        # macOS sed needs '' after -i.
+        sed -i '' "s/MARKETING_VERSION: \"$current\"/MARKETING_VERSION: \"$VERSION\"/" project.yml
+        git add project.yml
+        git commit -m "Bump version to $VERSION"
+        git push origin main
+        # Regenerate Xcode project with the new version baked in.
+        if command -v xcodegen >/dev/null 2>&1; then
+            xcodegen >/dev/null
+        fi
+    fi
+fi
 
 # Apply signing override if provided via env
 SIGN_OVERRIDE=()
@@ -190,7 +250,7 @@ if [[ "$ACTION" == "--notarize" ]]; then
     xcrun stapler validate "$APP" && echo "✓ Notarized & stapled"
 fi
 
-if [[ "$ACTION" == "--dmg" ]]; then
+if [[ "$ACTION" == "--dmg" || "$ACTION" == "--release" ]]; then
     if [[ "${SIGN_IDENTITY:-}" != *"Developer ID Application"* ]]; then
         echo ""
         echo "✗ DMG requires SIGN_IDENTITY = Developer ID Application cert."
@@ -259,4 +319,24 @@ if [[ "$ACTION" == "--dmg" ]]; then
     echo ""
     echo "✓ Distributable DMG: $DMG"
     echo "  Drop on AirDrop / share via any channel — opens cleanly on any Mac."
+fi
+
+# --- Tag + GitHub release (only --release) ----------------------------
+if [[ "$ACTION" == "--release" ]]; then
+    echo ""
+    echo "→ Tagging $TAG and pushing…"
+    git tag -a "$TAG" -m "Release $TAG"
+    git push origin "$TAG"
+
+    echo "→ Creating GitHub release with DMG attached…"
+    gh release create "$TAG" "$DMG" \
+        --title "$TAG" \
+        --generate-notes
+
+    REPO_URL=$(gh repo view --json url --jq .url 2>/dev/null || echo "")
+    echo ""
+    echo "✓ Released $TAG"
+    if [[ -n "$REPO_URL" ]]; then
+        echo "  ${REPO_URL}/releases/tag/$TAG"
+    fi
 fi
