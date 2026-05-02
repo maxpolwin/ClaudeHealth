@@ -37,6 +37,17 @@ enum Cache {
     static var url: URL { directory.appendingPathComponent("cache.json") }
 
     static func load() -> CachePayload? {
+        // Ownership gate: only trust a cache file owned by the current uid. Schema
+        // and bundle-id are public values and don't actually defend against a
+        // hostile process — but a same-uid attacker has to drop a file owned by
+        // them, which we can detect cheaply via stat(2).
+        var st = stat()
+        if stat(url.path, &st) == 0 {
+            if st.st_uid != getuid() {
+                Log.cache.fault("cache owned by uid \(st.st_uid, privacy: .public) (expected \(getuid(), privacy: .public)) — rebuilding")
+                return nil
+            }
+        }
         guard let data = try? Data(contentsOf: url) else { return nil }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -59,6 +70,12 @@ enum Cache {
     }
 
     static func save(_ payload: CachePayload) {
+        // Defense-in-depth: even if a caller forgets the security gate, refuse
+        // to overwrite the cache when the binary is in a degraded state.
+        guard SecurityState.shared.allowsCacheWrite else {
+            Log.cache.fault("refusing to write cache: process is in degraded security state")
+            return
+        }
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         do {

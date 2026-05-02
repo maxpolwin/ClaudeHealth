@@ -59,9 +59,10 @@ final class DataStore {
         self.limitEvents = UsageLimitDefaults.events
         let projectsDir = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/projects", isDirectory: true)
-        // 0.5s poll — live-feel updates while you're actively coding. Cost is
-        // ~30 file stats per tick, negligible CPU.
-        self.watcher = FileWatcher(root: projectsDir, interval: 0.5)
+        // 1.5s poll — live-feel without burning ~1k stat() calls/sec on users with
+        // many project dirs. The watcher is debounced; aggregator is off-main now,
+        // so a faster poll buys nothing perceptible.
+        self.watcher = FileWatcher(root: projectsDir, interval: 1.5)
         recomputeProgressAndDetectCrossing()
         Task { await self.refresh() }
         watcher.start { [weak self] in
@@ -86,21 +87,26 @@ final class DataStore {
         defer { isRefreshing = false }
         let snapshotCache = self.cache
         let result = await parser.parseAll(reusing: snapshotCache)
-        // Cheap synchronous side-channel: read Claude Desktop's agent-mode session metadata
-        // (~5 ms; just JSON files <100 KiB each, no tokens inside).
-        let coworkSessions = CoworkSessionsParser.parseAll()
-        let agg = Aggregator.aggregate(
-            records: result.records,
-            totalFiles: result.fileCount,
-            parseDurationMs: result.durationMs,
-            coworkSessions: coworkSessions
-        )
+        // Cowork parse + aggregator are pure CPU over the just-parsed records;
+        // run them off the main actor so they don't stutter bubble animations
+        // when the timer fires every 5s or the watcher detects a change.
+        let agg = await Task.detached(priority: .userInitiated) { () -> Aggregates in
+            let coworkSessions = CoworkSessionsParser.parseAll()
+            return Aggregator.aggregate(
+                records: result.records,
+                totalFiles: result.fileCount,
+                parseDurationMs: result.durationMs,
+                coworkSessions: coworkSessions
+            )
+        }.value
         self.cache = result.index
         self.aggregates = agg
         recomputeProgressAndDetectCrossing()
-        let payload = CachePayload(fileIndex: result.index, aggregates: agg)
-        DispatchQueue.global(qos: .utility).async {
-            Cache.save(payload)
+        if SecurityState.shared.allowsCacheWrite {
+            let payload = CachePayload(fileIndex: result.index, aggregates: agg)
+            DispatchQueue.global(qos: .utility).async {
+                Cache.save(payload)
+            }
         }
     }
 

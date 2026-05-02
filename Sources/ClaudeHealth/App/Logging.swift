@@ -25,11 +25,14 @@ enum Log {
 
 extension String {
     /// Render any filesystem-derived (or otherwise untrusted) string safely for
-    /// inclusion in a log line. Drops control bytes, non-printable ASCII, and
-    /// truncates to 120 chars so an attacker who can plant a directory named
+    /// inclusion in a log line. Replaces the user's home-directory prefix with
+    /// a literal `~` (so Console.app readers don't see the username), drops
+    /// control bytes and non-printable ASCII, and truncates to 120 chars so an
+    /// attacker who can plant a directory named
     /// `foo\n2026-05-01 [SECURITY] ALL OK\nbar` can't inject fake log lines.
     var logSafe: String {
-        let cleaned = unicodeScalars.compactMap { s -> Character? in
+        let scrubbed = Self.scrubHomePrefix(self)
+        let cleaned = scrubbed.unicodeScalars.compactMap { s -> Character? in
             guard s.isASCII else { return nil }
             // Allow tab; drop other C0 controls and DEL.
             if s.value < 32 && s != "\t" { return nil }
@@ -38,6 +41,15 @@ extension String {
         }
         let out = String(cleaned)
         return out.count > 120 ? String(out.prefix(120)) + "…" : out
+    }
+
+    private static let homePathPrefix: String = {
+        FileManager.default.homeDirectoryForCurrentUser.path
+    }()
+
+    private static func scrubHomePrefix(_ s: String) -> String {
+        guard !homePathPrefix.isEmpty, s.contains(homePathPrefix) else { return s }
+        return s.replacingOccurrences(of: homePathPrefix, with: "~")
     }
 }
 

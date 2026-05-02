@@ -10,6 +10,14 @@ enum LaunchAtLogin {
     }
 
     static func setEnabled(_ enabled: Bool) {
+        // Refuse to register persistence when the launch-time security checks
+        // marked us compromised — otherwise a tampered binary could establish
+        // login-item persistence right after the user dismissed the alert.
+        // Unregister is always allowed (it removes persistence, never adds it).
+        if enabled, !SecurityState.shared.allowsLoginItemRegistration {
+            Log.launch.fault("refusing to register Login Item: process is in degraded security state")
+            return
+        }
         do {
             if enabled {
                 if SMAppService.mainApp.status != .enabled {

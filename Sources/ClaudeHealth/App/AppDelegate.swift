@@ -68,6 +68,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for key in suspicious {
             if let value = env[key], !value.isEmpty {
                 Log.security.fault("\(key, privacy: .public) is set at launch (\(value.logSafe, privacy: .public)) — hardened runtime should have stripped this")
+                #if !DEBUG
+                SecurityState.shared.markCompromised(reason: "\(key) survived hardened runtime")
+                #endif
             }
         }
 
@@ -78,10 +81,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.security.info("self-signature check passed")
         case .tampered(let reason):
             Log.security.fault("self-signature check FAILED — bundle likely tampered: \(reason.logSafe, privacy: .public)")
+            SecurityState.shared.markCompromised(reason: "self-signature tamper: \(reason)")
             SignatureCheck.presentTamperAlert(reason: reason)
         case .checkFailed(let reason):
-            // Could not determine — degrade-as-suspicious only when we're a Release build.
+            // Could not determine — only escalate in Release builds (Debug runs unsigned).
             Log.security.error("self-signature check could not run: \(reason.logSafe, privacy: .public)")
+            #if !DEBUG
+            SecurityState.shared.markCompromised(reason: "self-signature check failed: \(reason)")
+            #endif
         }
     }
 

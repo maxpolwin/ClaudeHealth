@@ -147,12 +147,26 @@ final class BubbleWindowController: NSWindowController {
 
     private static func loadOrigin() -> NSPoint {
         let d = UserDefaults.standard
-        if d.object(forKey: bubblePosKey) != nil {
-            let x = d.double(forKey: bubblePosKey + ".x")
-            let y = d.double(forKey: bubblePosKey + ".y")
-            return NSPoint(x: x, y: y)
+        guard d.object(forKey: bubblePosKey) != nil else { return defaultOrigin() }
+        let saved = NSPoint(x: d.double(forKey: bubblePosKey + ".x"),
+                            y: d.double(forKey: bubblePosKey + ".y"))
+        // Clamp to a screen the user can actually see — otherwise unplugging an
+        // external display between sessions strands the bubble at coordinates
+        // off the current screen tree.
+        let visible: NSRect
+        if let onScreen = NSScreen.screens.first(where: { $0.frame.contains(saved) }) {
+            visible = onScreen.visibleFrame
+        } else if let main = NSScreen.main {
+            visible = main.visibleFrame
+        } else {
+            return defaultOrigin()
         }
-        return defaultOrigin()
+        let inset: CGFloat = 8
+        let x = max(visible.minX + inset - bubblePadding,
+                    min(visible.maxX - bubbleSide - inset + bubblePadding, saved.x))
+        let y = max(visible.minY + inset - bubblePadding,
+                    min(visible.maxY - bubbleSide - inset + bubblePadding, saved.y))
+        return NSPoint(x: x, y: y)
     }
 
     private static func saveOrigin(_ p: NSPoint) {

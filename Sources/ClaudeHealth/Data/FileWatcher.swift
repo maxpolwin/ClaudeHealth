@@ -7,11 +7,13 @@ final class FileWatcher {
     private var timer: Timer?
     private let interval: TimeInterval
     private let root: URL
+    private let rootCanonical: String
     private var lastSnapshot: [String: Date] = [:]
     private var onChange: (() -> Void)?
 
     init(root: URL, interval: TimeInterval = 5.0) {
         self.root = root
+        self.rootCanonical = root.resolvingSymlinksInPath().standardizedFileURL.path
         self.interval = interval
     }
 
@@ -46,12 +48,22 @@ final class FileWatcher {
             return out
         }
         for projectDir in projectDirs {
-            let isDir = (try? projectDir.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+            // Resolve symlinks and bounds-check; otherwise a malicious symlink under
+            // ~/.claude/projects/foo → /etc would have us watching unrelated files
+            // and triggering CPU-burn refreshes on every change there.
+            let projectResolved = projectDir.resolvingSymlinksInPath().standardizedFileURL
+            let projectCanonical = projectResolved.path
+            guard projectCanonical.hasPrefix(rootCanonical + "/") || projectCanonical == rootCanonical else {
+                continue
+            }
+            let isDir = (try? projectResolved.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
             guard isDir else { continue }
-            let files = (try? fm.contentsOfDirectory(at: projectDir, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+            let files = (try? fm.contentsOfDirectory(at: projectResolved, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
             for f in files where f.pathExtension == "jsonl" {
-                let mtime = (try? f.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                out[f.path] = mtime
+                let resolved = f.resolvingSymlinksInPath().standardizedFileURL
+                guard resolved.path.hasPrefix(rootCanonical + "/") else { continue }
+                let mtime = (try? resolved.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                out[resolved.path] = mtime
             }
         }
         return out

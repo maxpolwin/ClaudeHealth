@@ -45,6 +45,10 @@ final class ConfettiWindowController: NSWindowController {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    deinit {
+        dismissWork?.cancel()
+    }
+
     func celebrate() {
         Log.confetti.info("celebrate()")
         guard let window else { return }
